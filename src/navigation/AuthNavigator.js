@@ -5,6 +5,7 @@ import { useDarkMode } from '../hooks/useDarkMode';
 import LoginScreen from '../screens/auth/LoginScreen';
 import SignupScreen from '../screens/auth/SignupScreen';
 import ForgotPasswordScreen from '../screens/auth/ForgotPasswordScreen';
+import ProfileSetupScreen from '../screens/auth/ProfileSetupScreen';
 
 const Stack = createStackNavigator();
 
@@ -32,6 +33,10 @@ const AuthNavigator = () => {
       <Stack.Screen 
         name="ForgotPassword" 
         component={ForgotPasswordScreen} 
+      />
+      <Stack.Screen 
+        name="ProfileSetup" 
+        component={ProfileSetupScreen} 
       />
     </Stack.Navigator>
   );

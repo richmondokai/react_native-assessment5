@@ -1,5 +1,5 @@
 import React, { createContext, useState, useEffect, useContext } from 'react';
-import { login as apiLogin, register as apiRegister } from '../services/auth_remote_services';
+import { login as apiLogin, register as apiRegister, updateProfile as apiUpdateProfile } from '../services/auth_remote_services';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { TOKEN_KEY, USER_KEY } from '../constants';
 import { debugAsyncStorage, clearAllAsyncStorage, clearUserSpecificData } from '../utils/debugStorage';
@@ -96,14 +96,28 @@ export const AuthProvider = ({ children }) => {
       
       // Ensure we have proper user data with unique ID
       const userData = response.user || {};
+      
+      // Try to get bio data from local storage (temporary fix until backend returns bio)
+      let bioData = null;
+      try {
+        bioData = await AsyncStorage.getItem(`BIO_DATA_${email}`);
+        if (bioData) {
+          console.log('Retrieved bio data from local storage:', bioData);
+        }
+      } catch (error) {
+        console.log('Error retrieving bio data:', error);
+      }
+      
       const userWithId = {
         ...userData,
         id: userData.id || email, // Use email as unique ID if no ID provided
-        email: email
+        email: email,
+        bio: userData.bio || bioData || '' // Use API bio, fallback to local bio, then empty string
       };
       
       console.log('Logging in user with ID:', userWithId.id);
-      console.log('Login user data:', userWithId);
+      console.log('Login user data with bio:', userWithId);
+      console.log('Final bio value:', userWithId.bio);
       
       // DEBUG: Check storage before saving user (temporarily disabled to fix crash)
       // await debugAsyncStorage();
@@ -181,16 +195,16 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  const register = async (name, email, password) => {
+  const register = async (email, password, name, profilePicture = null, additionalProfileData = {}) => {
     try {
       console.log('=== REGISTERING NEW USER ===');
-      console.log('Email:', email, 'Name:', name);
+      console.log('Email:', email, 'Name:', name, 'Additional Profile Data:', additionalProfileData);
       
       // STEP 1: COMPLETELY WIPE ALL EXISTING DATA FIRST
       await clearAllUserData();
       
       // STEP 2: Call API to register
-      const response = await apiRegister(email, password, name);
+      const response = await apiRegister(email, password, name, profilePicture, additionalProfileData);
       console.log('Registration API response:', response);
       
       // STEP 3: Ensure we have proper user data
@@ -204,10 +218,16 @@ export const AuthProvider = ({ children }) => {
       
       console.log('Final user data to save:', userWithId);
       
-      // STEP 4: Do NOT save token/user data - let user log in manually
+      // STEP 4: Store bio data temporarily since backend doesn't return it during login
+      if (additionalProfileData.bio) {
+        console.log('Saving bio data locally for future login:', additionalProfileData.bio);
+        await AsyncStorage.setItem(`BIO_DATA_${email}`, additionalProfileData.bio);
+      }
+      
+      // STEP 5: Do NOT save token/user data - let user log in manually
       // This ensures proper account verification flow
       
-      // STEP 5: Keep auth state cleared (user needs to login manually)
+      // STEP 6: Keep auth state cleared (user needs to login manually)
       setAuthState({
         user: null,
         token: null,
@@ -279,27 +299,41 @@ export const AuthProvider = ({ children }) => {
    */
   const updateProfile = async (profileData) => {
     try {
-      // Note: This API endpoint is not implemented in the provided services
-      // For now, we'll just update the local storage
+      // Try to update via API first
+      const response = await apiUpdateProfile(profileData);
       
-      const userJson = await AsyncStorage.getItem(USER_KEY);
-      const currentUser = userJson ? JSON.parse(userJson) : {};
-      
-      const updatedUser = {
-        ...currentUser,
-        ...profileData
-      };
-      
-      // Save updated user data
-      await AsyncStorage.setItem(USER_KEY, JSON.stringify(updatedUser));
-      
-      // Update auth state
-      setAuthState(prevState => ({
-        ...prevState,
-        user: updatedUser,
-      }));
-      
-      return { success: true, user: updatedUser };
+      if (response && response.user) {
+        // Save updated user data
+        await AsyncStorage.setItem(USER_KEY, JSON.stringify(response.user));
+        
+        // Update auth state
+        setAuthState(prevState => ({
+          ...prevState,
+          user: response.user,
+        }));
+        
+        return { success: true, user: response.user };
+      } else {
+        // Fallback to local update
+        const userJson = await AsyncStorage.getItem(USER_KEY);
+        const currentUser = userJson ? JSON.parse(userJson) : {};
+        
+        const updatedUser = {
+          ...currentUser,
+          ...profileData
+        };
+        
+        // Save updated user data
+        await AsyncStorage.setItem(USER_KEY, JSON.stringify(updatedUser));
+        
+        // Update auth state
+        setAuthState(prevState => ({
+          ...prevState,
+          user: updatedUser,
+        }));
+        
+        return { success: true, user: updatedUser };
+      }
     } catch (error) {
       console.error('Error updating profile:', error);
       

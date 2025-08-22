@@ -14,6 +14,7 @@ import { useAuth } from '../../context/AuthContext';
 import { useNetwork } from '../../context/NetworkContext';
 import { useDarkMode } from '../../hooks/useDarkMode';
 import { useFocusEffect } from '@react-navigation/native';
+import { stripHtmlTags, getNoteTextContent } from '../../utils/htmlUtils';
 
 const FavoritesScreen = ({ navigation }) => {
   const [favorites, setFavorites] = useState([]);
@@ -217,7 +218,7 @@ const FavoritesScreen = ({ navigation }) => {
             {item.title || 'Untitled Note'}
           </Text>
           <Text style={[styles.notePreview, isDarkMode && { color: darkModeStyles.subText.color }]} numberOfLines={2}>
-            {item.content || 'No content'}
+            {getNoteTextContent(item) || 'No content'}
           </Text>
           <View style={styles.noteFooter}>
             <Text style={[styles.noteDate, isDarkMode && { color: '#888' }]}>{formattedDate}</Text>

@@ -11,6 +11,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useDarkMode } from '../../hooks/useDarkMode';
+import { stripHtmlTags } from '../../utils/htmlUtils';
 import { NOTES_KEY } from '../../constants';
 import { useAuth } from '../../context/AuthContext';
 import { getLocalNotes } from '../../services/notes_local_services';
@@ -147,7 +148,7 @@ const SearchScreen = ({ navigation }) => {
             {highlightText(item.title)}
           </Text>
           <Text style={[styles.notePreview, isDarkMode && { color: darkModeStyles.subText.color }]} numberOfLines={2}>
-            {highlightText(item.content)}
+            {highlightText(stripHtmlTags(item.content))}
           </Text>
           <View style={styles.noteFooter}>
             <Text style={[styles.noteDate, isDarkMode && { color: '#888' }]}>{formattedDate}</Text>

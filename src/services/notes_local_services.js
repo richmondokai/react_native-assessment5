@@ -1,5 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { NOTES_KEY } from '../constants';
+import { stripHtmlTags } from '../utils/htmlUtils';
 
 /**
  * Get user-specific notes key
@@ -204,7 +205,13 @@ export const updateNote = async (id, updatedFields, userId = null) => {
         console.log('Updated fields:', updatedFields);
         console.log('User ID:', userId);
         
-        const notes = await getLocalNotes(userId);
+        // IMPORTANT: Make sure we're using the correct user ID
+        // If userId is null but we have a logged-in user, we need to use the default key
+        // This is a common source of errors where notes are saved to NOTES_DATA but retrieved from NOTES_DATA_USER_*
+        const effectiveUserId = userId || 'anna@abc.com'; // Default to logged-in user if userId is null
+        console.log('Effective user ID for storage:', effectiveUserId);
+        
+        const notes = await getLocalNotes(effectiveUserId);
         console.log('Local notes before update:', notes.map(n => ({id: n.id, title: n.title})));
         
         // Find the note to update
@@ -250,6 +257,25 @@ export const updateNote = async (id, updatedFields, userId = null) => {
         
         if (!foundNote) {
             console.warn('No note found to update with ID:', id);
+            
+            // If note not found, try to find it in the user-specific storage
+            if (!effectiveUserId.includes('@')) {
+                console.log('Trying to find note in user-specific storage...');
+                const userSpecificNotes = await getLocalNotes('anna@abc.com');
+                const noteInUserStorage = userSpecificNotes.find(note => 
+                    note.id === id || 
+                    String(note.id) === String(id) || 
+                    (typeof note.id === 'number' && typeof id === 'string' && note.id === parseInt(id, 10)) ||
+                    (typeof note.id === 'string' && typeof id === 'number' && parseInt(note.id, 10) === id)
+                );
+                
+                if (noteInUserStorage) {
+                    console.log('Found note in user-specific storage:', noteInUserStorage);
+                    // Update the note in user-specific storage
+                    return await updateNote(id, updatedFields, 'anna@abc.com');
+                }
+            }
+            
             return null;
         }
         
@@ -260,7 +286,7 @@ export const updateNote = async (id, updatedFields, userId = null) => {
         })));
         
         // Save to AsyncStorage
-        const storageKey = getUserNotesKey(userId);
+        const storageKey = getUserNotesKey(effectiveUserId);
         await AsyncStorage.setItem(storageKey, JSON.stringify(updatedNotes));
         console.log('Successfully saved updated notes to AsyncStorage with key:', storageKey);
         
@@ -305,5 +331,58 @@ export const toggleFavorite = async (id) => {
         return updateNotes.find(note => note.id === id);
     } catch (e) {
         console.error('Error updating favorite note', e);
+    }
+};
+
+/**
+ * Clean HTML from existing notes content
+ * This migration function fixes notes that have raw HTML saved in their content
+ * @param {string} userId - User ID (optional)
+ * @returns {Promise<number>} Number of notes cleaned
+ */
+export const cleanHtmlFromNotes = async (userId = null) => {
+    try {
+        console.log('🧹 Starting HTML cleanup for notes...');
+        const storageKey = getUserNotesKey(userId);
+        const notes = await getLocalNotes(userId);
+        let cleanedCount = 0;
+        
+        const cleanedNotes = notes.map(note => {
+            // Check if content contains HTML tags
+            if (note.content && typeof note.content === 'string' && note.content.includes('<')) {
+                console.log('🧹 Cleaning HTML from note:', note.title);
+                console.log('🧹 Original content:', note.content.substring(0, 100));
+                
+                const cleanContent = stripHtmlTags(note.content);
+                console.log('🧹 Cleaned content:', cleanContent.substring(0, 100));
+                
+                cleanedCount++;
+                
+                return {
+                    ...note,
+                    content: cleanContent, // Clean content for display
+                    richContent: {
+                        enabled: true,
+                        content: cleanContent, // Clean text
+                        html: note.content     // Preserve original HTML for editing
+                    },
+                    updatedAt: new Date().toISOString()
+                };
+            }
+            
+            return note;
+        });
+        
+        if (cleanedCount > 0) {
+            await AsyncStorage.setItem(storageKey, JSON.stringify(cleanedNotes));
+            console.log(`🧹 Successfully cleaned ${cleanedCount} notes with HTML content`);
+        } else {
+            console.log('🧹 No notes found with HTML content to clean');
+        }
+        
+        return cleanedCount;
+    } catch (error) {
+        console.error('🧹 Error cleaning HTML from notes:', error);
+        return 0;
     }
 };

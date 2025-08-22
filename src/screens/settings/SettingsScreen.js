@@ -6,7 +6,8 @@ import {
   Switch, 
   TouchableOpacity, 
   ScrollView,
-  Alert
+  Alert,
+  Platform
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -17,18 +18,13 @@ import { clearUserSpecificData } from '../../utils/debugStorage';
 
 const SettingsScreen = ({ navigation }) => {
   const [darkMode, setDarkMode] = useState(false);
-  const [notificationsEnabled, setNotificationsEnabled] = useState(true);
+
   const [autoSave, setAutoSave] = useState(true);
   const [fontSize, setFontSize] = useState('medium');
   const { toggleTheme } = useTheme();
   const { user } = useAuth();
   
-  // Set navigation options
-  React.useLayoutEffect(() => {
-    navigation.setOptions({
-      headerShown: true
-    });
-  }, [navigation]);
+
   
   useEffect(() => {
     loadSettings();
@@ -50,7 +46,7 @@ const SettingsScreen = ({ navigation }) => {
           setDarkMode(false);
         }
         
-        setNotificationsEnabled(parsedSettings.notificationsEnabled !== false);
+
         setAutoSave(parsedSettings.autoSave !== false);
         setFontSize(parsedSettings.fontSize || 'medium');
       }
@@ -65,7 +61,7 @@ const SettingsScreen = ({ navigation }) => {
     try {
       const settings = {
         darkMode,
-        notificationsEnabled,
+
         autoSave,
         fontSize
       };
@@ -82,10 +78,7 @@ const SettingsScreen = ({ navigation }) => {
     setTimeout(() => saveSettings(), 100);
   };
   
-  const toggleNotifications = () => {
-    setNotificationsEnabled(!notificationsEnabled);
-    setTimeout(() => saveSettings(), 100);
-  };
+
   
   const toggleAutoSave = () => {
     setAutoSave(!autoSave);
@@ -177,7 +170,7 @@ const SettingsScreen = ({ navigation }) => {
     : styles.footerText;
 
   return (
-    <ScrollView style={[containerStyle, { paddingTop: 16 }]}>
+    <ScrollView style={containerStyle}>
       <Text style={sectionTitleStyle}>Appearance</Text>
       <View style={settingsGroupStyle}>
         <View style={styles.settingItem}>
@@ -241,18 +234,16 @@ const SettingsScreen = ({ navigation }) => {
       
       <Text style={sectionTitleStyle}>Notifications</Text>
       <View style={settingsGroupStyle}>
-        <View style={styles.settingItem}>
+        <TouchableOpacity 
+          style={styles.settingButton} 
+          onPress={() => navigation.navigate('NotificationSettings')}
+        >
           <View style={styles.settingLabelContainer}>
             <Ionicons name="notifications-outline" size={22} color={iconColor} style={styles.settingIcon} />
-            <Text style={settingLabelStyle}>Enable Notifications</Text>
+            <Text style={settingLabelStyle}>Notification Settings</Text>
           </View>
-          <Switch
-            value={notificationsEnabled}
-            onValueChange={toggleNotifications}
-            trackColor={{ false: '#ddd', true: '#007AFF' }}
-            thumbColor="#fff"
-          />
-        </View>
+          <Ionicons name="chevron-forward" size={20} color="#999" />
+        </TouchableOpacity>
       </View>
       
       <Text style={sectionTitleStyle}>Editor</Text>
@@ -330,90 +321,113 @@ const SettingsScreen = ({ navigation }) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f8f8f8',
+    backgroundColor: Platform.OS === 'ios' ? '#F2F2F7' : '#f8f8f8',
   },
   sectionTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    marginTop: 24,
-    marginBottom: 8,
+    fontSize: Platform.OS === 'ios' ? 13 : 18,
+    fontWeight: Platform.OS === 'ios' ? '400' : 'bold',
+    textTransform: Platform.OS === 'ios' ? 'uppercase' : 'none',
+    letterSpacing: Platform.OS === 'ios' ? 0.8 : 0,
+    marginTop: Platform.OS === 'ios' ? 35 : 24,
+    marginBottom: Platform.OS === 'ios' ? 6 : 8,
     paddingHorizontal: 16,
-    color: '#333',
+    color: Platform.OS === 'ios' ? '#8E8E93' : '#333',
   },
   settingsGroup: {
     backgroundColor: '#fff',
-    borderRadius: 8,
-    marginHorizontal: 16,
-    marginBottom: 8,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-    elevation: 2,
+    marginHorizontal: Platform.OS === 'ios' ? 0 : 16,
+    marginBottom: Platform.OS === 'ios' ? 35 : 8,
+    borderRadius: Platform.OS === 'ios' ? 0 : 8,
+    ...Platform.select({
+      ios: {
+        borderTopWidth: StyleSheet.hairlineWidth,
+        borderBottomWidth: StyleSheet.hairlineWidth,
+        borderColor: '#C6C6C8',
+      },
+      android: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.1,
+        shadowRadius: 2,
+        elevation: 2,
+      }
+    }),
   },
   settingItem: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingVertical: 14,
+    paddingVertical: Platform.OS === 'ios' ? 11 : 14,
     paddingHorizontal: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#f0f0f0',
+    minHeight: Platform.OS === 'ios' ? 44 : undefined,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: Platform.OS === 'ios' ? '#C6C6C8' : '#f0f0f0',
   },
   settingButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingVertical: 14,
+    paddingVertical: Platform.OS === 'ios' ? 11 : 14,
     paddingHorizontal: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#f0f0f0',
+    minHeight: Platform.OS === 'ios' ? 44 : undefined,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: Platform.OS === 'ios' ? '#C6C6C8' : '#f0f0f0',
   },
   settingLabelContainer: {
     flexDirection: 'row',
     alignItems: 'center',
   },
   settingIcon: {
-    marginRight: 12,
+    marginRight: Platform.OS === 'ios' ? 12 : 12,
+    width: 29,
+    textAlign: 'center',
   },
   settingLabel: {
-    fontSize: 16,
-    color: '#333',
+    fontSize: Platform.OS === 'ios' ? 17 : 16,
+    color: Platform.OS === 'ios' ? '#000000' : '#333',
+    fontWeight: Platform.OS === 'ios' ? '400' : 'normal',
   },
   fontSizeOptions: {
     flexDirection: 'row',
   },
   fontSizeButton: {
-    width: 30,
-    height: 30,
-    borderRadius: 15,
+    width: Platform.OS === 'ios' ? 28 : 30,
+    height: Platform.OS === 'ios' ? 28 : 30,
+    borderRadius: Platform.OS === 'ios' ? 14 : 15,
     justifyContent: 'center',
     alignItems: 'center',
     marginLeft: 8,
-    backgroundColor: '#f0f0f0',
+    backgroundColor: Platform.OS === 'ios' ? '#E5E5EA' : '#f0f0f0',
+    ...Platform.select({
+      ios: {
+        borderWidth: StyleSheet.hairlineWidth,
+        borderColor: '#C6C6C8',
+      }
+    }),
   },
   fontSizeButtonActive: {
     backgroundColor: '#007AFF',
+    borderColor: '#007AFF',
   },
   fontSizeButtonText: {
-    fontSize: 14,
-    fontWeight: 'bold',
-    color: '#555',
+    fontSize: Platform.OS === 'ios' ? 13 : 14,
+    fontWeight: Platform.OS === 'ios' ? '600' : 'bold',
+    color: Platform.OS === 'ios' ? '#000000' : '#555',
   },
   fontSizeButtonTextActive: {
     color: '#fff',
   },
   versionText: {
-    fontSize: 14,
-    color: '#999',
+    fontSize: Platform.OS === 'ios' ? 17 : 14,
+    color: Platform.OS === 'ios' ? '#8E8E93' : '#999',
   },
   footer: {
-    padding: 24,
+    padding: Platform.OS === 'ios' ? 20 : 24,
     alignItems: 'center',
   },
   footerText: {
-    fontSize: 14,
-    color: '#999',
+    fontSize: Platform.OS === 'ios' ? 13 : 14,
+    color: Platform.OS === 'ios' ? '#8E8E93' : '#999',
   },
 });
 

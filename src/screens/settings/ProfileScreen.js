@@ -15,7 +15,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAuth } from '../../context/AuthContext';
 import { useDarkMode } from '../../hooks/useDarkMode';
 import { useNotes } from '../../context/NotesContext';
-import { NOTES_KEY, USER_KEY } from '../../constants';
+import { NOTES_KEY, USER_KEY, BASE_URL } from '../../constants';
 import { getLocalNotes } from '../../services/notes_local_services';
 
 const ProfileScreen = ({ navigation }) => {
@@ -26,6 +26,7 @@ const ProfileScreen = ({ navigation }) => {
   const [name, setName] = useState('John Doe');
   const [email, setEmail] = useState('john.doe@example.com');
   const [bio, setBio] = useState('I love taking notes and staying organized!');
+  const [profilePicture, setProfilePicture] = useState(null);
   
   // Stats data
   const [stats, setStats] = useState({
@@ -167,20 +168,35 @@ const ProfileScreen = ({ navigation }) => {
       console.log('=== PROFILE SCREEN DEBUG ===');
       console.log('Loading profile from USER_KEY:', USER_KEY);
       
-      // Try to load from AsyncStorage first
-      const storedProfile = await AsyncStorage.getItem('USER_PROFILE');
+      // Try to load from AsyncStorage first (use same key as AuthContext)
+      const storedProfile = await AsyncStorage.getItem(USER_KEY);
       if (storedProfile) {
         const profileData = JSON.parse(storedProfile);
         console.log('Found stored profile:', profileData);
+        console.log('Profile bio:', profileData.bio);
+        console.log('Profile picture:', profileData.profilePicture);
+        console.log('Profile picture type:', typeof profileData.profilePicture);
+        console.log('Profile picture length:', profileData.profilePicture?.length);
+        if (profileData.profilePicture) {
+          console.log('Profile picture starts with:', profileData.profilePicture.substring(0, 50));
+        }
         setName(profileData.name || 'John Doe');
         setEmail(profileData.email || 'john.doe@example.com');
         setBio(profileData.bio || 'I love taking notes and staying organized!');
+        setProfilePicture(profileData.profilePicture || null);
       } else if (user) {
         // Use auth context user data if available
         console.log('Using auth context user data:', user);
+        console.log('Auth profile picture:', user.profilePicture);
+        console.log('Auth picture type:', typeof user.profilePicture);
+        console.log('Auth picture length:', user.profilePicture?.length);
+        if (user.profilePicture) {
+          console.log('Auth picture starts with:', user.profilePicture.substring(0, 50));
+        }
         setName(user.name || user.username || 'John Doe');
         setEmail(user.email || 'john.doe@example.com');
         setBio(user.bio || 'I love taking notes and staying organized!');
+        setProfilePicture(user.profilePicture || null);
       }
       console.log('=== END PROFILE LOAD DEBUG ===');
     } catch (error) {
@@ -204,6 +220,13 @@ const ProfileScreen = ({ navigation }) => {
     const firstInitial = nameParts[0].charAt(0);
     const lastInitial = nameParts[nameParts.length - 1].charAt(0);
     return (firstInitial + lastInitial).toUpperCase();
+  };
+
+  // Function to get complete image URL
+  const getCompleteImageUrl = (imagePath) => {
+    if (!imagePath) return null;
+    if (imagePath.startsWith('http')) return imagePath; // Already complete URL
+    return `${BASE_URL}${imagePath}`; // Add base URL to relative path
   };
   
   const loadStatsData = async () => {
@@ -335,7 +358,27 @@ const ProfileScreen = ({ navigation }) => {
       }]}>
         <View style={styles.profileImageContainer}>
           <View style={styles.profileImage}>
-            <Text style={styles.profileInitials}>{getInitials(name)}</Text>
+            {profilePicture ? (
+              <Image 
+                source={{ uri: getCompleteImageUrl(profilePicture) }} 
+                style={styles.profileImagePicture}
+                onError={(error) => {
+                  console.log('=== PROFILE PICTURE ERROR ===');
+                  console.log('Profile picture failed to load:', profilePicture);
+                  console.log('Error details:', error.nativeEvent);
+                  console.log('=== END PROFILE PICTURE ERROR ===');
+                  setProfilePicture(null);
+                }}
+                onLoad={() => {
+                  console.log('Profile picture loaded successfully:', profilePicture);
+                }}
+                onLoadStart={() => {
+                  console.log('Profile picture load started:', profilePicture);
+                }}
+              />
+            ) : (
+              <Text style={styles.profileInitials}>{getInitials(name)}</Text>
+            )}
           </View>
           {isEditing && (
             <TouchableOpacity style={styles.changePhotoButton}>
@@ -529,6 +572,12 @@ const styles = StyleSheet.create({
     backgroundColor: '#007AFF',
     justifyContent: 'center',
     alignItems: 'center',
+    overflow: 'hidden',
+  },
+  profileImagePicture: {
+    width: '100%',
+    height: '100%',
+    borderRadius: 50,
   },
   profileInitials: {
     fontSize: 36,

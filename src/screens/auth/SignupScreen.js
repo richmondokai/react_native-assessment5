@@ -9,7 +9,7 @@ const SignupScreen = ({ navigation }) => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
+
   const [emailError, setEmailError] = useState('');
   const [isEmailValid, setIsEmailValid] = useState(false);
   const [passwordError, setPasswordError] = useState('');
@@ -155,33 +155,15 @@ const SignupScreen = ({ navigation }) => {
       return;
     }
 
-    setIsLoading(true);
-
-    try {
-      // Call the register function from AuthContext
-      const result = await register(name, email, password);
-      
-      if (result.success) {
-        // Show success message and navigate back to login
-        Alert.alert(
-          'Account Created Successfully!', 
-          'Your account has been created. Please log in with your credentials.',
-          [
-            {
-              text: 'OK',
-              onPress: () => navigation.navigate('Login')
-            }
-          ]
-        );
-      } else {
-        Alert.alert('Registration Failed', result.error || 'Failed to create account');
+    // Navigate to ProfileSetupScreen with signup data
+    // Account creation will happen after profile setup completion
+    navigation.navigate('ProfileSetup', {
+      signupData: {
+        name,
+        email,
+        password
       }
-    } catch (error) {
-      console.log('Signup error:', error);
-      Alert.alert('Error', 'Failed to create account. Please try again.');
-    } finally {
-      setIsLoading(false);
-    }
+    });
   };
 
   return (
@@ -321,14 +303,12 @@ const SignupScreen = ({ navigation }) => {
         <TouchableOpacity 
           style={[
             styles.button, 
-            isLoading && styles.buttonDisabled,
             isDarkMode && darkModeStyles.button
           ]}
           onPress={handleSignup}
-          disabled={isLoading}
         >
           <Text style={styles.buttonText}>
-            {isLoading ? 'Creating Account...' : 'Create Account'}
+            Finish Sign Up
           </Text>
         </TouchableOpacity>
 

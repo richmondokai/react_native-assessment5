@@ -1,16 +1,25 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Alert } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Alert, Platform, Image } from 'react-native';
 import { createDrawerNavigator, DrawerContentScrollView, DrawerItemList } from '@react-navigation/drawer';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAuth } from '../context/AuthContext';
 import { useDarkMode } from '../hooks/useDarkMode';
+import { USER_KEY, BASE_URL } from '../constants';
 
 import TabNavigator from './TabNavigator';
 import SettingsStackNavigator from './SettingsStackNavigator';
+import CategoriesStackNavigator from './CategoriesStackNavigator';
 import ProfileScreen from '../screens/settings/ProfileScreen';
 import StatisticsScreen from '../screens/settings/StatisticsScreen';
 import HelpScreen from '../screens/settings/HelpScreen';
+
+// Enhanced feature screens
+import SocialFeedScreen from '../screens/social/SocialFeedScreen';
+import CameraScreen from '../screens/media/CameraScreen';
+import PhotoGalleryScreen from '../screens/media/PhotoGalleryScreen';
+
+
 
 const Drawer = createDrawerNavigator();
 
@@ -21,7 +30,8 @@ const CustomDrawerContent = (props) => {
   const [userProfile, setUserProfile] = useState({
     name: 'John Doe',
     email: 'john.doe@example.com',
-    initials: 'JD'
+    initials: 'JD',
+    profilePicture: null
   });
 
   // Function to get initials from name
@@ -49,25 +59,29 @@ const CustomDrawerContent = (props) => {
         console.log('=== DRAWER NAVIGATION DEBUG ===');
         console.log('Loading user profile for drawer...');
         
-        // Try to load from AsyncStorage first
-        const storedProfile = await AsyncStorage.getItem('USER_PROFILE');
+        // Try to load from AsyncStorage first (use same key as AuthContext)
+        const storedProfile = await AsyncStorage.getItem(USER_KEY);
         if (storedProfile) {
           const profileData = JSON.parse(storedProfile);
           console.log('Found stored profile for drawer:', profileData);
+          console.log('Drawer profile picture:', profileData.profilePicture);
           
           const name = profileData.name || 'John Doe';
           const email = profileData.email || 'john.doe@example.com';
           const initials = getInitials(name);
+          const profilePicture = profileData.profilePicture || null;
           
-          setUserProfile({ name, email, initials });
+          setUserProfile({ name, email, initials, profilePicture });
         } else if (user) {
           // Use auth context user data if available
           console.log('Using auth context user data for drawer:', user);
+          console.log('Drawer user profile picture:', user.profilePicture);
           const name = user.name || user.username || 'John Doe';
           const email = user.email || 'john.doe@example.com';
           const initials = getInitials(name);
+          const profilePicture = user.profilePicture || null;
           
-          setUserProfile({ name, email, initials });
+          setUserProfile({ name, email, initials, profilePicture });
         }
         console.log('=== END DRAWER NAVIGATION DEBUG ===');
       } catch (error) {
@@ -102,6 +116,13 @@ const CustomDrawerContent = (props) => {
     );
   };
 
+  // Function to get complete image URL
+  const getCompleteImageUrl = (imagePath) => {
+    if (!imagePath) return null;
+    if (imagePath.startsWith('http')) return imagePath; // Already complete URL
+    return `${BASE_URL}${imagePath}`; // Add base URL to relative path
+  };
+
   return (
     <DrawerContentScrollView 
       {...props}
@@ -116,7 +137,27 @@ const CustomDrawerContent = (props) => {
       ]}>
         <View style={styles.userInfoSection}>
           <View style={styles.profileIcon}>
-            <Text style={styles.profileIconText}>{userProfile.initials}</Text>
+            {userProfile.profilePicture ? (
+              <Image 
+                source={{ uri: getCompleteImageUrl(userProfile.profilePicture) }} 
+                style={styles.profileIconImage}
+                onError={(error) => {
+                  console.log('=== DRAWER PICTURE ERROR ===');
+                  console.log('Drawer profile picture failed to load:', userProfile.profilePicture);
+                  console.log('Error details:', error.nativeEvent);
+                  console.log('=== END DRAWER PICTURE ERROR ===');
+                  setUserProfile(prev => ({ ...prev, profilePicture: null }));
+                }}
+                onLoad={() => {
+                  console.log('Drawer profile picture loaded successfully:', userProfile.profilePicture);
+                }}
+                onLoadStart={() => {
+                  console.log('Drawer profile picture load started:', userProfile.profilePicture);
+                }}
+              />
+            ) : (
+              <Text style={styles.profileIconText}>{userProfile.initials}</Text>
+            )}
           </View>
           <Text style={[styles.displayName, isDarkMode && { color: '#f0f0f0' }]}>{userProfile.name}</Text>
           <Text style={[styles.email, isDarkMode && { color: '#b0b0b0' }]}>{userProfile.email}</Text>
@@ -145,14 +186,31 @@ const DrawerNavigator = () => {
       screenOptions={{
         headerShown: true,
         headerStyle: {
-          backgroundColor: isDarkMode ? '#1a1a1a' : '#f5f5f5',
+          backgroundColor: isDarkMode ? '#1a1a1a' : (Platform.OS === 'ios' ? '#F9F9F9' : '#f5f5f5'),
+          borderBottomWidth: Platform.OS === 'ios' ? StyleSheet.hairlineWidth : 1,
+          borderBottomColor: isDarkMode ? '#333333' : (Platform.OS === 'ios' ? '#C6C6C8' : '#e0e0e0'),
+          shadowOpacity: Platform.OS === 'ios' ? 0 : 0.1,
+          elevation: Platform.OS === 'ios' ? 0 : 4,
         },
-        headerTintColor: isDarkMode ? '#f0f0f0' : '#333',
+        headerTintColor: isDarkMode ? '#f0f0f0' : (Platform.OS === 'ios' ? '#000000' : '#333'),
+        headerTitleStyle: {
+          fontSize: Platform.OS === 'ios' ? 17 : 18,
+          fontWeight: Platform.OS === 'ios' ? '600' : 'bold',
+        },
         drawerActiveTintColor: isDarkMode ? '#4a9eff' : '#007AFF',
-        drawerInactiveTintColor: isDarkMode ? '#b0b0b0' : '#555',
+        drawerInactiveTintColor: isDarkMode ? '#b0b0b0' : (Platform.OS === 'ios' ? '#000000' : '#555'),
         drawerStyle: {
-          backgroundColor: isDarkMode ? '#121212' : '#fff',
-        }
+          backgroundColor: isDarkMode ? '#121212' : (Platform.OS === 'ios' ? '#F2F2F7' : '#fff'),
+        },
+        drawerLabelStyle: {
+          fontSize: Platform.OS === 'ios' ? 17 : 16,
+          fontWeight: Platform.OS === 'ios' ? '400' : 'normal',
+          marginLeft: Platform.OS === 'ios' ? -16 : 0,
+        },
+        drawerItemStyle: {
+          marginVertical: Platform.OS === 'ios' ? 0 : 4,
+          paddingVertical: Platform.OS === 'ios' ? 8 : 0,
+        },
       }}
       drawerContent={(props) => <CustomDrawerContent {...props} />}
     >
@@ -176,6 +234,39 @@ const DrawerNavigator = () => {
         }}
       />
       <Drawer.Screen
+        name="Categories"
+        component={CategoriesStackNavigator}
+        options={{
+          title: 'Categories',
+          drawerIcon: ({ color }) => (
+            <Ionicons name="pricetag-outline" size={24} color={color} />
+          ),
+        }}
+      />
+      <Drawer.Screen
+        name="Camera"
+        component={CameraScreen}
+        options={{
+          title: 'Camera',
+          drawerIcon: ({ color }) => (
+            <Ionicons name="camera-outline" size={24} color={color} />
+          ),
+          headerShown: false,
+        }}
+      />
+      <Drawer.Screen
+        name="PhotoGallery"
+        component={PhotoGalleryScreen}
+        options={{
+          title: 'Photo Gallery',
+          drawerIcon: ({ color }) => (
+            <Ionicons name="images-outline" size={24} color={color} />
+          ),
+        }}
+      />
+
+
+      <Drawer.Screen
         name="Statistics"
         component={StatisticsScreen}
         options={{
@@ -193,16 +284,7 @@ const DrawerNavigator = () => {
           ),
         }}
       />
-      <Drawer.Screen
-        name="Settings"
-        component={SettingsStackNavigator}
-        options={{
-          drawerIcon: ({ color }) => (
-            <Ionicons name="settings-outline" size={24} color={color} />
-          ),
-          headerShown: false, // Let the stack navigator handle headers
-        }}
-      />
+
     </Drawer.Navigator>
   );
 };
@@ -225,6 +307,12 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 10,
+    overflow: 'hidden',
+  },
+  profileIconImage: {
+    width: '100%',
+    height: '100%',
+    borderRadius: 30,
   },
   profileIconText: {
     color: 'white',

@@ -241,7 +241,8 @@ class SyncService {
     await addNotes(
       noteData.title,
       noteData.content,
-      noteData.category || noteData.priority || 'medium'
+      noteData.category || noteData.priority || 'medium',
+      noteData.isPublic
     );
     
     console.log('Note created on server successfully');
@@ -261,7 +262,8 @@ class SyncService {
       noteId,
       noteData.title,
       noteData.content,
-      noteData.category || noteData.priority || 'medium'
+      noteData.category || noteData.priority || 'medium',
+      noteData.isPublic
     );
     
     console.log('Note updated on server successfully');

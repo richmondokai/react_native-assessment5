@@ -9,6 +9,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useDarkMode } from '../../hooks/useDarkMode';
+import { stripHtmlTags } from '../../utils/htmlUtils';
 import { useAuth } from '../../context/AuthContext';
 import { useNotes } from '../../context/NotesContext';
 import { useFocusEffect } from '@react-navigation/native';
@@ -433,7 +434,7 @@ const CategoriesScreen = ({ navigation }) => {
             {item.title}
           </Text>
           <Text style={[styles.notePreview, isDarkMode && { color: darkModeStyles.subText.color }]} numberOfLines={2}>
-            {item.content}
+            {stripHtmlTags(item.content)}
           </Text>
           <View style={styles.noteFooter}>
             <Text style={[styles.noteDate, isDarkMode && { color: '#888' }]}>{formattedDate}</Text>

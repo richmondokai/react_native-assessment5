@@ -1,7 +1,7 @@
 import React, { createContext, useState, useEffect, useContext, useRef } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { getNotes, addNotes, updateNotes, deleteNotes, getFavoriteNotes as getRemoteFavorites, addFavoriteNotes, deleteFavoriteNotes } from '../services/notes_remote_services';
-import { getLocalNotes, addNote, updateNote as updateLocalNote, deleteNote as deleteLocalNote, addAllNotes, toggleFavorite } from '../services/notes_local_services';
+import { getLocalNotes, addNote, updateNote as updateLocalNote, deleteNote as deleteLocalNote, addAllNotes, toggleFavorite, cleanHtmlFromNotes } from '../services/notes_local_services';
 import { useNetwork } from './NetworkContext';
 import { useAuth } from './AuthContext';
 import offlineQueueService, { OPERATION_TYPES, OPERATION_PRIORITY } from '../services/offline_queue_service';
@@ -179,10 +179,21 @@ export const NotesProvider = ({ children }) => {
         console.log('📝 NO EXISTING NOTES - CLEAN SLATE');
       }
       
-      console.log('Setting notes in state:', storedNotes.length);
-      console.log('⚠️ ABOUT TO SET NOTES - This should persist the notes');
-      setNotes(storedNotes);
-      console.log('✅ Notes state set successfully');
+      // Clean any existing HTML from notes content before setting state
+      console.log('🧹 Checking for HTML content in notes...');
+      const cleanedCount = await cleanHtmlFromNotes(userId);
+      if (cleanedCount > 0) {
+        console.log(`🧹 Cleaned ${cleanedCount} notes with HTML content, reloading...`);
+        // Reload notes after cleaning
+        const cleanedNotes = await getLocalNotes(userId);
+        setNotes(cleanedNotes);
+        console.log('✅ Notes state set with cleaned content');
+      } else {
+        console.log('Setting notes in state:', storedNotes.length);
+        console.log('⚠️ ABOUT TO SET NOTES - This should persist the notes');
+        setNotes(storedNotes);
+        console.log('✅ Notes state set successfully');
+      }
       
       // Verify the notes were set
       setTimeout(() => {
@@ -258,6 +269,7 @@ export const NotesProvider = ({ children }) => {
         updatedAt: new Date().toISOString(),
         category: noteData.category || 'Personal',
         isFavorite: noteData.isFavorite || false,
+        isPublic: noteData.isPublic !== undefined ? noteData.isPublic : true, // Default to public for social feed
         syncStatus: 'pending', // Mark as needing sync
         isLocalOnly: !isConnected // Track if created offline
       };
@@ -272,7 +284,8 @@ export const NotesProvider = ({ children }) => {
           await addNotes(
             noteData.title,
             noteData.content,
-            noteData.priority || noteData.category || 'medium'
+            noteData.priority || noteData.category || 'medium',
+            noteData.isPublic
           );
           
           // Mark as synced if successful
@@ -387,7 +400,8 @@ export const NotesProvider = ({ children }) => {
             noteId,
             updatedNoteData.title,
             updatedNoteData.content,
-            updatedNoteData.priority || updatedNoteData.category || 'medium'
+            updatedNoteData.priority || updatedNoteData.category || 'medium',
+            updatedNoteData.isPublic
           );
           
           // Mark as synced if successful
@@ -865,6 +879,56 @@ export const NotesProvider = ({ children }) => {
       
     } catch (error) {
       console.error('❌ Error clearing notes from storage:', error);
+    }
+  };
+
+  /**
+   * Force sync all notes to server with isPublic field
+   */
+  const forceSyncAllNotes = async () => {
+    try {
+      console.log('=== FORCE SYNC ALL NOTES ===');
+      const userId = user?.email || user?.id;
+      if (!userId) {
+        console.error('No user ID available for sync');
+        return;
+      }
+
+      const localNotes = await getLocalNotes(userId);
+      console.log(`Found ${localNotes.length} local notes to sync`);
+
+      for (const note of localNotes) {
+        try {
+          console.log(`Syncing note: ${note.title} (isPublic: ${note.isPublic})`);
+          
+          if (note.id && typeof note.id === 'number' && note.id > 1000000000000) {
+            // This looks like a locally generated ID, create new note
+            await addNotes(
+              note.title,
+              note.content,
+              note.category || 'Personal',
+              note.isPublic !== undefined ? note.isPublic : true
+            );
+            console.log(`Created note on server: ${note.title}`);
+          } else {
+            // This has a server ID, update existing note
+            await updateNotes(
+              note.id,
+              note.title,
+              note.content,
+              note.category || 'Personal',
+              note.isPublic !== undefined ? note.isPublic : true
+            );
+            console.log(`Updated note on server: ${note.title}`);
+          }
+        } catch (noteError) {
+          console.error(`Failed to sync note ${note.title}:`, noteError.message);
+        }
+      }
+
+      console.log('=== FORCE SYNC COMPLETE ===');
+    } catch (error) {
+      console.error('Error in force sync:', error);
     }
   };
 

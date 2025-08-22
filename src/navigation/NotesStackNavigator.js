@@ -4,6 +4,8 @@ import { createStackNavigator } from '@react-navigation/stack';
 import NotesListScreen from '../screens/notes/NotesListScreen';
 import NoteDetailScreen from '../screens/notes/NoteDetailScreen';
 import SearchScreen from '../screens/notes/SearchScreen';
+import NearbyNotesScreen from '../screens/notes/NearbyNotesScreen';
+import LocationMapView from '../components/maps/MapView';
 import { useDarkMode } from '../hooks/useDarkMode';
 
 const Stack = createStackNavigator();
@@ -40,6 +42,16 @@ const NotesStackNavigator = () => {
         name="Search" 
         component={SearchScreen} 
         options={{ title: 'Search Notes' }}
+      />
+      <Stack.Screen 
+        name="NearbyNotes" 
+        component={NearbyNotesScreen} 
+        options={{ headerShown: false }}
+      />
+      <Stack.Screen 
+        name="LocationMap" 
+        component={LocationMapView} 
+        options={{ headerShown: false }}
       />
     </Stack.Navigator>
   );

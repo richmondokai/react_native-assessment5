@@ -38,12 +38,13 @@ export const getNotes = async () => {
  * @param {string} priority - Note priority
  * @returns {Promise<boolean>} Success status
  */
-export const addNotes = async (title, content, priority) => {
+export const addNotes = async (title, content, priority, isPublic = true) => {
     try {
         const requestData = {
             title,
             content,
-            category: priority
+            category: priority,
+            isPublic: isPublic
         };
         
         console.log('=== REMOTE SERVICE DEBUG ===');
@@ -51,6 +52,7 @@ export const addNotes = async (title, content, priority) => {
         console.log('- title:', title);
         console.log('- content length:', content?.length || 0);
         console.log('- priority/category:', priority);
+        console.log('- isPublic:', isPublic);
         console.log('Request data being sent to API:', requestData);
         console.log('=== END REMOTE SERVICE DEBUG ===');
         
@@ -75,7 +77,7 @@ export const addNotes = async (title, content, priority) => {
  * @param {string} priority - Note priority
  * @returns {Promise<boolean>} Success status
  */
-export const updateNotes = async (id, title, content, priority) => {
+export const updateNotes = async (id, title, content, priority, isPublic) => {
     try {
         // Make sure id is a number for the API
         const numericId = parseInt(id, 10);
@@ -89,7 +91,8 @@ export const updateNotes = async (id, title, content, priority) => {
         const requestData = {
             title,
             content,
-            category: priority
+            category: priority,
+            isPublic: isPublic
         };
         
         console.log('=== UPDATE REMOTE SERVICE DEBUG ===');
@@ -98,6 +101,7 @@ export const updateNotes = async (id, title, content, priority) => {
         console.log('- title:', title);
         console.log('- content length:', content?.length || 0);
         console.log('- priority/category:', priority);
+        console.log('- isPublic:', isPublic);
         console.log('Request data being sent to API:', requestData);
         console.log('=== END UPDATE REMOTE SERVICE DEBUG ===');
         

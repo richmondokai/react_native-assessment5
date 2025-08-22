@@ -16,6 +16,7 @@ import { useNetwork } from '../../context/NetworkContext';
 import { useDarkMode } from '../../hooks/useDarkMode';
 import { useFocusEffect } from '@react-navigation/native';
 import { NOTES_KEY } from '../../constants';
+import { stripHtmlTags, getNoteTextContent } from '../../utils/htmlUtils';
 
 const NotesListScreen = ({ navigation }) => {
   const [refreshing, setRefreshing] = useState(false);
@@ -126,8 +127,8 @@ const NotesListScreen = ({ navigation }) => {
   };
 
   const renderNoteItem = ({ item }) => {
-    const date = new Date(item.date);
-    const formattedDate = `${date.toLocaleDateString()} ${date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+    const creationDate = new Date(item.date);
+    const formattedDate = `${creationDate.toLocaleDateString()} ${creationDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
     
     return (
       <TouchableOpacity
@@ -145,10 +146,12 @@ const NotesListScreen = ({ navigation }) => {
             {item.title}
           </Text>
           <Text style={[styles.notePreview, isDarkMode && { color: darkModeStyles.subText.color }]} numberOfLines={2}>
-            {item.content}
+            {getNoteTextContent(item)}
           </Text>
           <View style={styles.noteFooter}>
-            <Text style={[styles.noteDate, isDarkMode && { color: '#888' }]}>{formattedDate}</Text>
+            <View style={styles.dateContainer}>
+              <Text style={[styles.noteDate, isDarkMode && { color: '#888' }]}>{formattedDate}</Text>
+            </View>
             <View style={styles.noteMetadata}>
               {item.isFavorite && (
                 <Ionicons name="star" size={16} color="#FFD700" style={styles.noteIcon} />
@@ -186,6 +189,21 @@ const NotesListScreen = ({ navigation }) => {
     );
   }
 
+  // Sort notes by creation date in descending order (newest first)
+  const sortedNotes = [...notes].sort((a, b) => {
+    const dateA = new Date(a.date || a.createdAt || 0);
+    const dateB = new Date(b.date || b.createdAt || 0);
+    
+    // Debug logging for the first few notes
+    if (notes.length <= 5) {
+      console.log(`📅 Sorting note "${a.title}" (${a.date}) vs "${b.title}" (${b.date})`);
+      console.log(`📅 Date A: ${dateA.toISOString()}, Date B: ${dateB.toISOString()}`);
+      console.log(`📅 Comparison result: ${dateB.getTime() - dateA.getTime()}`);
+    }
+    
+    return dateB.getTime() - dateA.getTime();
+  });
+
   return (
     <View style={[styles.container, darkModeStyles.container]}>
       <TouchableOpacity 
@@ -199,9 +217,9 @@ const NotesListScreen = ({ navigation }) => {
         <Text style={[styles.searchPlaceholder, isDarkMode && { color: "#888" }]}>Search notes...</Text>
       </TouchableOpacity>
       
-      {notes.length > 0 ? (
+      {sortedNotes.length > 0 ? (
         <FlatList
-          data={notes}
+          data={sortedNotes}
           renderItem={renderNoteItem}
           keyExtractor={item => item.id}
           contentContainerStyle={styles.notesList}
@@ -293,9 +311,20 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
   },
+  dateContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
   noteDate: {
     fontSize: 12,
     color: '#999',
+  },
+  dateLabel: {
+    fontSize: 10,
+    color: '#999',
+    marginLeft: 4,
+    fontStyle: 'italic',
   },
   noteMetadata: {
     flexDirection: 'row',

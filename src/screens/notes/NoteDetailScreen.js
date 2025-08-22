@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { 
   View, 
   Text, 
@@ -17,15 +17,27 @@ import * as Haptics from 'expo-haptics';
 import { useNotes } from '../../context/NotesContext';
 import { useNetwork } from '../../context/NetworkContext';
 import { useDarkMode } from '../../hooks/useDarkMode';
+import { LocationService } from '../../services/locationService';
+import { LocationUtils } from '../../utils/locationUtils';
+import LocationPicker from '../../components/maps/LocationPicker';
+import CrossPlatformRichEditor from '../../components/forms/CrossPlatformRichEditor';
+import CategoryManager from '../../components/forms/CategoryManager';
+import EnhancedLocationPicker from '../../components/maps/EnhancedLocationPicker';
+import EnhancedImageAttachment from '../../components/media/EnhancedImageAttachment';
+import VoiceMemo from '../../components/media/VoiceMemo';
+import { stripHtmlTags } from '../../utils/htmlUtils';
 import { NOTES_KEY } from '../../constants';
 
 const NoteDetailScreen = ({ route, navigation }) => {
-  const { noteId, isNew } = route.params || {};
+  // Memoize route params to prevent unnecessary re-renders
+  const routeParams = useMemo(() => route.params || {}, [route.params?.noteId, route.params?.isNew]);
+  const { noteId, isNew } = routeParams;
   
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
   const [category, setCategory] = useState('Personal');
   const [isFavorite, setIsFavorite] = useState(false);
+  const [isPublic, setIsPublic] = useState(true); // Default to public for social feed
   const [isLoading, setIsLoading] = useState(!isNew);
   const [isSaving, setIsSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
@@ -34,6 +46,10 @@ const NoteDetailScreen = ({ route, navigation }) => {
   const [hasUserInput, setHasUserInput] = useState(false);
   const [hasUserModifiedCategory, setHasUserModifiedCategory] = useState(false);
   const [hasUserModifiedFavorite, setHasUserModifiedFavorite] = useState(false);
+  const [location, setLocation] = useState(null);
+  const [isAutoDetectingLocation, setIsAutoDetectingLocation] = useState(false);
+  const [attachments, setAttachments] = useState([]);
+  const [isContentLoading, setIsContentLoading] = useState(false);
   const { isDarkMode, styles: darkModeStyles } = useDarkMode();
   const { getNoteById, createNote, updateNote, deleteNote, refreshNotes, notes } = useNotes();
   const { isConnected } = useNetwork();
@@ -46,6 +62,52 @@ const NoteDetailScreen = ({ route, navigation }) => {
   const contentRef = useRef('');
   const categoryRef = useRef('Personal');
   const favoriteRef = useRef(false);
+
+  const autoDetectLocation = async () => {
+    try {
+      setIsAutoDetectingLocation(true);
+      console.log('Starting enhanced auto-detect location...');
+      
+      // Check if user has granted location permissions with educational message
+      const hasPermission = await LocationService.requestPermissions(true);
+      console.log('Location permission granted:', hasPermission);
+      
+      if (hasPermission) {
+        // Get location as address string directly
+        const locationString = await LocationService.getCurrentLocation({
+          accuracy: 'high',
+          timeout: 15000, // 15 seconds timeout
+          returnAddressOnly: true
+        });
+        
+        console.log('Got location string:', locationString);
+        console.log('Type of location string:', typeof locationString);
+        if (locationString) {
+          setLocation(locationString);
+          console.log('Location set as string:', locationString);
+          console.log('Location state updated to:', locationString);
+          
+          // Show brief success feedback
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        }
+      } else {
+        console.log('Location permission denied - note will not have location data');
+      }
+    } catch (error) {
+      console.error('Error auto-detecting location:', error);
+      
+      // Show user-friendly error for specific issues
+      if (error.message?.includes('timeout')) {
+        console.warn('Location detection timed out');
+      } else if (error.message?.includes('permission')) {
+        console.warn('Location permission issue');
+      } else {
+        console.warn('Location detection failed:', error.message);
+      }
+    } finally {
+      setIsAutoDetectingLocation(false);
+    }
+  };
   const skipLoadNoteRef = useRef(false);
   
   // Memoized callbacks for better performance
@@ -65,13 +127,29 @@ const NoteDetailScreen = ({ route, navigation }) => {
   const handleContentChange = useCallback((text) => {
     // Ensure text is a string and handle null/undefined cases
     const safeText = text || '';
-    console.log('Content changed to:', safeText);
-    setContent(safeText);
-    contentRef.current = safeText; // Store in ref as backup
-    skipLoadNoteRef.current = true; // Set skip flag
-    console.log('Content stored in ref:', contentRef.current);
-    console.log('Skip loadNote flag set to:', skipLoadNoteRef.current);
-  }, []);
+    console.log('📄 Rich text content changed to:', safeText.substring(0, 100) + (safeText.length > 100 ? '...' : ''));
+    console.log('📄 Content length:', safeText.length);
+    console.log('📄 Is HTML content:', safeText.includes('<') && safeText.includes('>'));
+    console.log('📄 Content type:', typeof safeText);
+    
+    // Don't update if content is currently loading
+    if (isContentLoading) {
+      console.log('📄 Content is loading, skipping user input update');
+      return;
+    }
+    
+    // Only update if content actually changed
+    if (content !== safeText) {
+      console.log('📄 Content actually changed, updating state and ref');
+      setContent(safeText);
+      contentRef.current = safeText; // Store in ref as backup
+      skipLoadNoteRef.current = true; // Set skip flag
+      console.log('📄 Content stored in ref - length:', contentRef.current?.length || 0);
+      console.log('📄 Skip loadNote flag set to:', skipLoadNoteRef.current);
+    } else {
+      console.log('📄 Content unchanged, skipping update');
+    }
+  }, [content, isContentLoading]);
 
   const categories = ['Personal', 'Work', 'Ideas', 'To-Do'];
 
@@ -120,18 +198,12 @@ const NoteDetailScreen = ({ route, navigation }) => {
         console.log('Same note, preserving state');
       }
     }
-  }, [route.params?.noteId, noteId]);
+  }, [routeParams?.noteId, noteId]);
 
   useEffect(() => {
-    console.log('NoteDetailScreen useEffect triggered');
-    console.log('Dependencies changed:', { navigation, isSaving, routeParams: route.params, isDarkMode });
-    
     // Extract the noteId from route params every time to ensure it's up to date
-    const currentNoteId = route.params?.noteId;
-    const isNewNote = route.params?.isNew;
-    
-    console.log('NoteDetailScreen useEffect - route params:', route.params);
-    console.log('NoteDetailScreen useEffect - isNew:', isNewNote, 'noteId:', currentNoteId);
+    const currentNoteId = routeParams?.noteId;
+    const isNewNote = routeParams?.isNew;
     
     // Only load note if we're not currently saving, we have a noteId, and user hasn't made changes
     if (!isNewNote && currentNoteId && !isSaving && !skipLoadNoteRef.current) {
@@ -139,6 +211,7 @@ const NoteDetailScreen = ({ route, navigation }) => {
       
       // Clear refs and modification flags before loading existing note
       // This prevents old ref values from interfering with the loaded note data
+      console.log('🔄 Clearing refs and flags for note loading');
       titleRef.current = '';
       contentRef.current = '';
       categoryRef.current = 'Personal';
@@ -147,13 +220,18 @@ const NoteDetailScreen = ({ route, navigation }) => {
       setHasUserModifiedCategory(false);
       setHasUserModifiedFavorite(false);
       
+      // Don't clear content state - let loadNote handle content properly
+      console.log('🔄 Ready for note load without clearing content state');
+      
       loadNoteRef.current();
     } else if (isNewNote) {
-      console.log('Setting up for new note - clearing state');
       setTitle('');
       setContent('');
       setCategory('Personal');
       setIsFavorite(false);
+      // Don't reset location to null - let auto-detection work
+      // setLocation(null);
+      setAttachments([]);
       
       // Initialize refs for new notes
       titleRef.current = '';
@@ -165,6 +243,10 @@ const NoteDetailScreen = ({ route, navigation }) => {
       // Don't clear modification flags for new notes - user might make changes
       // setHasUserModifiedCategory(false);
       // setHasUserModifiedFavorite(false);
+      
+      // Auto-detect location for new notes
+      console.log('New note - current location state:', location);
+      autoDetectLocation();
     }
     
     // Set up header right button for saving
@@ -200,7 +282,7 @@ const NoteDetailScreen = ({ route, navigation }) => {
         </TouchableOpacity>
       ),
     });
-  }, [navigation, route.params, isDarkMode, isSaving, saveSuccess]);
+  }, [routeParams?.isNew, routeParams?.noteId, isDarkMode, isSaving, saveSuccess]);
 
   const loadNote = useCallback(async () => {
     // Prevent multiple simultaneous calls
@@ -257,10 +339,21 @@ const NoteDetailScreen = ({ route, navigation }) => {
       if (note) {
         // Force a string for title and content
         const noteTitle = note.title ? String(note.title) : 'Untitled Note';
-        const noteContent = note.content ? String(note.content) : '';
+        // Prefer HTML content from rich editor if available, fallback to plain text
+        const noteContent = note.richContent?.html || note.richContent?.content || (note.content ? String(note.content) : '');
         
-        console.log('Setting title to:', noteTitle, 'Type:', typeof noteTitle);
-        console.log('Setting content to:', noteContent?.substring(0, 30) + (noteContent?.length > 30 ? '...' : ''), 'Type:', typeof noteContent);
+        console.log('📖 Loading note content:');
+        console.log('📖 Setting title to:', noteTitle, 'Type:', typeof noteTitle);
+        console.log('📖 Raw note structure:', {
+          hasRichContent: !!note.richContent,
+          richContentHtml: note.richContent?.html?.substring(0, 50) + (note.richContent?.html?.length > 50 ? '...' : ''),
+          richContentContent: note.richContent?.content?.substring(0, 50) + (note.richContent?.content?.length > 50 ? '...' : ''),
+          plainContent: note.content?.substring(0, 50) + (note.content?.length > 50 ? '...' : ''),
+          finalContent: noteContent?.substring(0, 50) + (noteContent?.length > 50 ? '...' : '')
+        });
+        console.log('📖 Final content length:', noteContent?.length || 0);
+        console.log('📖 Content type:', typeof noteContent);
+        console.log('📖 Is HTML:', noteContent.includes('<') && noteContent.includes('>'));
         
         // Only set title if user hasn't typed anything or if it's different from current
         if (!hasUserInput && 
@@ -279,11 +372,36 @@ const NoteDetailScreen = ({ route, navigation }) => {
           }
         }
         
-        // Only set content if user hasn't typed anything
-        if (!contentRef.current || typeof contentRef.current !== 'string' || contentRef.current.trim().length === 0) {
-          console.log('Setting content from note data');
+        // Set content if user hasn't typed anything OR we're loading a different note
+        const shouldLoadContent = !contentRef.current || 
+                                 typeof contentRef.current !== 'string' || 
+                                 contentRef.current.trim().length === 0 ||
+                                 !hasUserInput; // Force load if no user input yet
+                                 
+        if (shouldLoadContent) {
+          console.log('📖 Setting content from note data');
+          console.log('📖 Content being set:', {
+            length: noteContent?.length || 0,
+            preview: noteContent?.substring(0, 100) + (noteContent?.length > 100 ? '...' : ''),
+            isHTML: noteContent?.includes('<') && noteContent?.includes('>')
+          });
+          
+          // Set loading flag to prevent interference
+          setIsContentLoading(true);
+          
+          // Force immediate state update
           setContent(noteContent);
           contentRef.current = noteContent; // Update ref to match loaded data
+          
+          // Verify state update immediately
+          console.log('📖 Content state and ref updated');
+          console.log('📖 Immediate content state check:', noteContent);
+          
+          // Clear loading flag after a delay
+          setTimeout(() => {
+            setIsContentLoading(false);
+            console.log('📖 Content loading completed, flag cleared');
+          }, 200);
         } else {
           console.log('Preserving user input content:', contentRef.current);
           // Ensure the content state matches the ref
@@ -293,20 +411,12 @@ const NoteDetailScreen = ({ route, navigation }) => {
           }
         }
         
-        // Only set category if user hasn't modified it
-        if (!hasUserModifiedCategory) {
-          console.log('Setting category from note data');
-          setCategory(note.category || 'Personal');
-          categoryRef.current = note.category || 'Personal'; // Update ref to match loaded data
-        } else {
-          console.log('Preserving user input category:', categoryRef.current);
-          console.log('User modified category flag:', hasUserModifiedCategory);
-          // Ensure the category state matches the ref
-          if (category !== categoryRef.current) {
-            console.log('Restoring category from ref:', categoryRef.current);
-            setCategory(categoryRef.current);
-          }
-        }
+        // Always set category from note data when loading a note
+        console.log('Setting category from note data');
+        const noteCategory = note.category || 'Personal';
+        setCategory(noteCategory);
+        categoryRef.current = noteCategory; // Update ref to match loaded data
+        console.log('Category set to:', noteCategory);
         
         console.log('=== CATEGORY DEBUG ===');
         console.log('hasUserModifiedCategory:', hasUserModifiedCategory);
@@ -315,20 +425,22 @@ const NoteDetailScreen = ({ route, navigation }) => {
         console.log('Final category state:', category);
         console.log('=== END CATEGORY DEBUG ===');
         
-        // Only set favorite if user hasn't modified it
-        if (!hasUserModifiedFavorite) {
-          console.log('Setting favorite from note data');
-          setIsFavorite(note.isFavorite || false);
-          favoriteRef.current = note.isFavorite || false; // Update ref to match loaded data
-        } else {
-          console.log('Preserving user input favorite:', favoriteRef.current);
-          console.log('User modified favorite flag:', hasUserModifiedFavorite);
-          // Ensure the favorite state matches the ref
-          if (isFavorite !== favoriteRef.current) {
-            console.log('Restoring favorite from ref:', favoriteRef.current);
-            setIsFavorite(favoriteRef.current);
-          }
-        }
+        // Always set favorite from note data when loading a note
+        console.log('Setting favorite from note data');
+        const noteFavorite = note.isFavorite || false;
+        setIsFavorite(noteFavorite);
+        favoriteRef.current = noteFavorite; // Update ref to match loaded data
+        console.log('Favorite set to:', noteFavorite);
+        
+        // Set public/private status from note data
+        setIsPublic(note.isPublic !== undefined ? note.isPublic : true);
+        
+        // Set location from note data
+        console.log('Loading location from note:', note.location);
+        setLocation(note.location || null);
+        
+        // Set attachments from note data
+        setAttachments(note.attachments || []);
         
         console.log('=== FAVORITE DEBUG ===');
         console.log('hasUserModifiedFavorite:', hasUserModifiedFavorite);
@@ -341,9 +453,11 @@ const NoteDetailScreen = ({ route, navigation }) => {
         setTimeout(() => {
           console.log('VERIFICATION - Current title state after setting:', title);
           console.log('VERIFICATION - Current content state after setting:', content && typeof content === 'string' ? content.substring(0, 30) + (content.length > 30 ? '...' : '') : 'empty');
+          console.log('VERIFICATION - Content ref after setting:', contentRef.current && typeof contentRef.current === 'string' ? contentRef.current.substring(0, 30) + (contentRef.current.length > 30 ? '...' : '') : 'empty');
           console.log('VERIFICATION - Current category state after setting:', category);
           console.log('VERIFICATION - Current favorite state after setting:', isFavorite);
           console.log('VERIFICATION - User modified flags - Category:', hasUserModifiedCategory, 'Favorite:', hasUserModifiedFavorite);
+          console.log('VERIFICATION - shouldLoadContent was:', shouldLoadContent);
         }, 100);
       } else {
         console.log('Note not found in state with ID:', currentNoteId);
@@ -361,6 +475,14 @@ const NoteDetailScreen = ({ route, navigation }) => {
 
   // Assign the function to the ref
   loadNoteRef.current = loadNote;
+
+  // Ensure content state stays in sync with contentRef
+  useEffect(() => {
+    if (contentRef.current && contentRef.current !== content) {
+      console.log('🔄 Syncing content state with ref:', contentRef.current.substring(0, 50));
+      setContent(contentRef.current);
+    }
+  }, [contentRef.current, content]);
 
   const handleSave = async () => {
     console.log('handleSave called with title:', title, 'Length:', title ? title.length : 0);
@@ -439,28 +561,79 @@ const NoteDetailScreen = ({ route, navigation }) => {
 
     setIsSaving(true);
     setSaveSuccess(false); // Clear any previous success state
-    // Get the current values from route.params
-    const isNewNote = route.params?.isNew;
-    const currentNoteId = route.params?.noteId;
+    // Get the current values from routeParams
+    const isNewNote = routeParams?.isNew;
+    const currentNoteId = routeParams?.noteId;
     
-    console.log('Saving note. Is new?', isNewNote, 'Note ID:', currentNoteId);
-    console.log('Current state - title:', currentTitle, 'content:', currentContent);
+          console.log('Saving note. Is new?', isNewNote, 'Note ID:', currentNoteId);
+      console.log('Current state - title:', currentTitle, 'content:', currentContent);
+      console.log('Location being saved:', location);
 
     try {
+      // Process content: save clean text for display, preserve HTML for editing
+      const cleanContent = stripHtmlTags(currentContent);
+      const htmlContent = currentContent;
+      
+      console.log('💾 Processing content for save:');
+      console.log('💾 Original content:', currentContent?.substring(0, 100));
+      console.log('💾 Clean content:', cleanContent?.substring(0, 100));
+      console.log('💾 Contains HTML:', currentContent?.includes('<'));
+      
       // Make sure we have all the required fields
       const noteData = {
         title: currentTitle.trim(),
-        content: currentContent, // Use the current content value
+        content: cleanContent, // Save clean text for social feed and listings
         category: currentCategory,
         isFavorite: currentFavorite,
-        // Make sure we preserve the date from the original note if editing
-        date: new Date().toISOString()
+        isPublic: isPublic,
+        location: location,
+        attachments: attachments,
+        richContent: { 
+          enabled: true, 
+          content: cleanContent, // Clean text content
+          html: htmlContent  // Original HTML for rich editor
+        }
       };
+
+      // Handle creation and update timestamps
+      if (isNewNote) {
+        // New notes get creation date and initial updatedAt
+        const now = new Date().toISOString();
+        noteData.date = now;
+        noteData.updatedAt = now;
+        console.log('Setting creation date for new note:', noteData.date);
+        console.log('Setting initial updatedAt for new note:', noteData.updatedAt);
+      } else {
+        // For existing notes, preserve the original creation date but update the timestamp
+        const existingNote = getNoteById(currentNoteId);
+        if (existingNote && existingNote.date) {
+          noteData.date = existingNote.date;
+          console.log('Preserving original creation date:', noteData.date);
+        } else {
+          // Fallback if no date exists
+          noteData.date = new Date().toISOString();
+          console.log('No original date found, setting current date:', noteData.date);
+        }
+        
+        // Always update the timestamp for existing notes
+        noteData.updatedAt = new Date().toISOString();
+        console.log('Setting updatedAt for existing note:', noteData.updatedAt);
+      }
       
       // Log the content being saved
-      console.log('Content being saved:', {
+      console.log('💾 Content being saved:', {
         contentLength: currentContent && typeof currentContent === 'string' ? currentContent.length : 0,
-        contentPreview: currentContent && typeof currentContent === 'string' ? currentContent.substring(0, 30) + (currentContent.length > 30 ? '...' : '') : 'empty'
+        contentPreview: currentContent && typeof currentContent === 'string' ? currentContent.substring(0, 50) + (currentContent.length > 50 ? '...' : '') : 'empty',
+        contentType: typeof currentContent,
+        isHTML: currentContent && typeof currentContent === 'string' ? (currentContent.includes('<') && currentContent.includes('>')) : false,
+        hasRichContent: !!(currentContent && currentContent.length > 0)
+      });
+      
+      console.log('💾 Rich content structure:', {
+        enabled: true,
+        content: currentContent?.substring(0, 50) + (currentContent?.length > 50 ? '...' : ''),
+        html: currentContent?.substring(0, 50) + (currentContent?.length > 50 ? '...' : ''),
+        length: currentContent?.length || 0
       });
       
       console.log('Note data to save:', noteData);
@@ -494,11 +667,27 @@ const NoteDetailScreen = ({ route, navigation }) => {
         result = await updateNote(existingNote.id, noteData);
       }
       
-      console.log('Save result:', result);
+      console.log('💾 Save result:', result);
       
       if (result && result.success) {
-        console.log('Save successful');
-        console.log('Saved note data:', result.note);
+        console.log('💾 Save successful');
+        console.log('💾 Detailed saved note data:', {
+          id: result.note?.id,
+          title: result.note?.title,
+          contentLength: result.note?.content?.length || 0,
+          contentPreview: result.note?.content?.substring(0, 100) + (result.note?.content?.length > 100 ? '...' : ''),
+          richContent: {
+            enabled: result.note?.richContent?.enabled,
+            contentLength: result.note?.richContent?.content?.length || 0,
+            htmlLength: result.note?.richContent?.html?.length || 0,
+            contentPreview: result.note?.richContent?.content?.substring(0, 100) + (result.note?.richContent?.content?.length > 100 ? '...' : ''),
+            htmlPreview: result.note?.richContent?.html?.substring(0, 100) + (result.note?.richContent?.html?.length > 100 ? '...' : '')
+          },
+          hasAttachments: !!(result.note?.attachments?.length > 0),
+          attachmentCount: result.note?.attachments?.length || 0,
+          hasLocation: !!result.note?.location,
+          updatedAt: result.note?.updatedAt
+        });
         
         // Debug: Notes save verification handled by NotesContext with user-specific storage
         console.log('Note save handled by NotesContext with user-specific storage');
@@ -656,10 +845,15 @@ const NoteDetailScreen = ({ route, navigation }) => {
   return (
     <KeyboardAvoidingView
       style={[styles.container, darkModeStyles.container]}
-      behavior={Platform.OS === 'ios' ? 'padding' : null}
-      keyboardVerticalOffset={Platform.OS === 'ios' ? 88 : 0}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? 100 : 20}
     >
-      <ScrollView style={[styles.scrollContainer, isDarkMode && { backgroundColor: 'transparent' }]}>
+      <ScrollView 
+        style={[styles.scrollContainer, isDarkMode && { backgroundColor: 'transparent' }]}
+        keyboardShouldPersistTaps="handled"
+        contentInsetAdjustmentBehavior="automatic"
+        showsVerticalScrollIndicator={false}
+      >
         <View style={styles.form}>
           <TextInput
             style={[styles.titleInput, isDarkMode && { 
@@ -718,6 +912,17 @@ const NoteDetailScreen = ({ route, navigation }) => {
                 color={isFavorite ? "#FFD700" : "#999"} 
               />
             </TouchableOpacity>
+            
+            <TouchableOpacity 
+              style={styles.favoriteButton}
+              onPress={() => setIsPublic(!isPublic)}
+            >
+              <Ionicons 
+                name={isPublic ? "globe" : "lock-closed"} 
+                size={24} 
+                color={isPublic ? "#007AFF" : "#999"} 
+              />
+            </TouchableOpacity>
           </View>
           
           {showCategoryPicker && (
@@ -725,7 +930,7 @@ const NoteDetailScreen = ({ route, navigation }) => {
               backgroundColor: darkModeStyles.card.backgroundColor,
               borderColor: darkModeStyles.card.borderColor
             }]}>
-              {categories.map(cat => (
+              {['Personal', 'Work', 'Ideas', 'To-Do'].map(cat => (
                 <TouchableOpacity
                   key={cat}
                   style={[
@@ -741,15 +946,66 @@ const NoteDetailScreen = ({ route, navigation }) => {
             </View>
           )}
           
-          <TextInput
-            style={[styles.contentInput, isDarkMode && { color: darkModeStyles.text.color }]}
-            placeholder="Start writing your note here..."
-            placeholderTextColor={isDarkMode ? '#888' : '#999'}
-            value={content || ''}
-            onChangeText={handleContentChange}
-            multiline
-            textAlignVertical="top"
-          />
+          {/* Location Section */}
+          <View style={styles.locationSection}>
+            <View style={styles.locationHeader}>
+              <Text style={[styles.sectionLabel, isDarkMode && { color: darkModeStyles.subText.color }]}>
+                Location
+              </Text>
+              {isAutoDetectingLocation && (
+                <View style={styles.locationLoadingContainer}>
+                  <ActivityIndicator 
+                    size="small" 
+                    color={isDarkMode ? darkModeStyles.primary.backgroundColor : "#007AFF"} 
+                  />
+                  <Text style={[styles.locationLoadingText, isDarkMode && { color: darkModeStyles.subText.color }]}>
+                    Detecting...
+                  </Text>
+                </View>
+              )}
+            </View>
+            <EnhancedLocationPicker
+              location={location}
+              onLocationChange={setLocation}
+              placeholder="Add location to this note"
+              navigation={navigation}
+              style={[
+                styles.locationPicker,
+                isDarkMode && {
+                  backgroundColor: darkModeStyles.card.backgroundColor,
+                  borderColor: darkModeStyles.card.borderColor
+                }
+              ]}
+            />
+          </View>
+
+          {/* Content Input */}
+          <View style={styles.contentSection}>
+            <Text style={[styles.sectionLabel, isDarkMode && { color: darkModeStyles.subText.color }]}>
+              Content
+            </Text>
+                          <CrossPlatformRichEditor
+                value={content || ''}
+                onChangeText={handleContentChange}
+                placeholder="Start writing your note here..."
+                style={styles.richEditor}
+                editable={true}
+            />
+          </View>
+
+          {/* Attachments Section */}
+          <View style={styles.attachmentSection}>
+            <EnhancedImageAttachment
+              attachments={attachments}
+              onAttachmentsChange={setAttachments}
+              maxImages={10}
+            />
+            <VoiceMemo
+              attachments={attachments}
+              onAttachmentsChange={setAttachments}
+              maxRecordings={5}
+            />
+          </View>
         </View>
       </ScrollView>
 
@@ -796,6 +1052,7 @@ const styles = StyleSheet.create({
   },
   form: {
     padding: 16,
+    paddingBottom: 100, // Extra padding for keyboard
   },
   headerButton: {
     paddingHorizontal: 16,
@@ -919,6 +1176,47 @@ const styles = StyleSheet.create({
     lineHeight: 24,
     minHeight: 300,
     textAlignVertical: 'top',
+  },
+  locationSection: {
+    marginBottom: 16,
+  },
+  sectionLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    marginBottom: 8,
+    color: '#333',
+  },
+  locationPicker: {
+    marginBottom: 0,
+  },
+  locationHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  locationLoadingContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  locationLoadingText: {
+    fontSize: 12,
+    color: '#666',
+    fontStyle: 'italic',
+  },
+  contentSection: {
+    marginVertical: 8,
+  },
+  richEditor: {
+    minHeight: 300,
+    marginBottom: 16,
+  },
+  attachmentSection: {
+    marginVertical: 16,
+    paddingTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: '#E0E0E0',
   },
   deleteButton: {
     flexDirection: 'row',

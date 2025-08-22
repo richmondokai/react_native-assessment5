@@ -9,7 +9,9 @@ import { ThemeProvider } from './src/context/ThemeContext';
 import { AuthProvider } from './src/context/AuthContext';
 import { NetworkProvider } from './src/context/NetworkContext';
 import { NotesProvider } from './src/context/NotesContext';
+import { SocialNotificationProvider } from './src/context/SocialNotificationContext';
 import NetworkStatusBar from './src/components/NetworkStatusBar';
+
 import { initializeSettings } from './src/utils/initializeSettings';
 
 // Prevent the splash screen from auto-hiding
@@ -79,10 +81,12 @@ export default function App() {
         <NetworkProvider>
           <AuthProvider>
             <NotesProvider>
-              <View style={{ flex: 1 }}>
-                <AppNavigator initialAuthenticated={isAuthenticated} />
-                <NetworkStatusBar />
-              </View>
+              <SocialNotificationProvider>
+                <View style={{ flex: 1 }}>
+                  <AppNavigator initialAuthenticated={isAuthenticated} />
+                  <NetworkStatusBar />
+                </View>
+              </SocialNotificationProvider>
             </NotesProvider>
           </AuthProvider>
         </NetworkProvider>
