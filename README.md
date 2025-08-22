@@ -139,12 +139,23 @@ npx expo run:ios
 
 ## 🔧 **Configuration**
 
-### **Environment Variables**
-Create a `.env` file in the root directory:
+### **Environment Variables & API Keys**
+Create a `.env` file in the root directory with your actual API keys:
+
 ```env
-API_BASE_URL=https://your-api-url.com
-GOOGLE_MAPS_API_KEY=your_google_maps_key
+# Google Maps API Configuration
+GOOGLE_MAPS_API_KEY=your_actual_google_maps_api_key_here
+GOOGLE_SERVICES_API_KEY=your_actual_google_services_api_key_here
+
+# API Configuration
+API_BASE_URL=https://react-native-lessons-api-production.up.railway.app
 ```
+
+**⚠️ Security Notice:**
+- Never commit your `.env` file to version control
+- The `.env` file is already added to `.gitignore`
+- Use `.env.example` as a template for other developers
+- For production builds, use secure environment variable management
 
 ### **Push Notifications**
 - Configure Firebase Cloud Messaging

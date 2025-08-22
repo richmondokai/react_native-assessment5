@@ -18,7 +18,7 @@
         "NSMicrophoneUsageDescription": "This app needs access to your microphone to record voice memos for your notes."
       },
       "config": {
-        "googleMapsApiKey": "AIzaSyA5EwWICbPAzb8c6FX1N0BoSvpZrscC-Nw"
+        "googleMapsApiKey": "${GOOGLE_MAPS_API_KEY}"
       }
     },
     "android": {
@@ -41,7 +41,7 @@
       "package": "com.anonymous.notesapp",
       "config": {
         "googleMaps": {
-          "apiKey": "AIzaSyA5EwWICbPAzb8c6FX1N0BoSvpZrscC-Nw"
+          "apiKey": "${GOOGLE_SERVICES_API_KEY}"
         }
       }
     },

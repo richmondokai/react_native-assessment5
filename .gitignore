@@ -33,6 +33,17 @@ yarn-error.*
 # local env files
 .env*.local
 
+# Environment variables
+.env
+
+# Google Services (contains API keys)
+google-services.json
+GoogleService-Info.plist
+
+# API Keys and Secrets
+**/api-keys.json
+**/secrets.json
+
 # typescript
 *.tsbuildinfo
 
